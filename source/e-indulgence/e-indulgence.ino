@@ -6,6 +6,7 @@
 #define PIN_RADAR_ECHO A0
 #define PIN_RADAR_TRIG A1
 #define PIN_BUZZER A2
+#define PIN_WHITE_LED 3
 
 typedef unsigned long ulong;
 
@@ -18,7 +19,7 @@ const unsigned int
   , TIMER_BELIEVER_PRESENT = 2000
   , TIMER_INITIALIZING_PRAYER = 1000
   , TIMER_BAD_BELIEVER_LEAVING = 2000
-  , TIMER_DONE_PRAYING_BEEP = 500
+  , TIMER_DONE_PRAYING_BEEP = 100
   , TIMER_DONE_PRAYING = 2000
   , PRAYER_TIME = 6000
   , DISTANCE_HIGH = 80
@@ -105,18 +106,23 @@ bool isBeeping = false;
 int time_prayed = 0;
 bool lcd_redraw_once = false;
 
+bool isWhiteLightOn = false;
+int whiteLightLevel = 0;
+int prayer_cost = 0;
+
 void setup() {
     Serial.begin(4800);
     lcd.begin(16, 2);
-    lcd.print("popros pana o odpusteni!");
+
     pinMode(PIN_RADAR_TRIG, OUTPUT);
     pinMode(PIN_RADAR_ECHO, INPUT);
     pinMode(PIN_BUZZER, OUTPUT);
+    pinMode(PIN_WHITE_LED, OUTPUT);
 }
 
 void display_draw() {
     if (!lcd_redraw_once) {
-            return;
+        return;
     }
     
     lcd.clear();
@@ -124,35 +130,49 @@ void display_draw() {
         
     switch (prayer_state) {
     case NO_BELIEVER:
-        lcd.print("NO_BELIEVER");
+        lcd.print("No fear,");
+        lcd.setCursor(0, 1);
+        lcd.print("come here.");
         break;
         
     case BELIEVER_PRESENT:
-        lcd.print("BELIEVER_PRESENT");
+        lcd.print("Connecting to");
+        lcd.setCursor(0,1);
+        lcd.print("god...");
         break;
     
     case INITIALIZING_PRAYER: 
-        lcd.print("INITIALIZING_PRAYER");
+        lcd.print("Welcome,");
+        lcd.setCursor(0, 1);
+        lcd.print("my child.");
         break;
     
     case PRAYING:
-        lcd.print("PRAYING");
+        lcd.print("Now pray.");
+        lcd.setCursor(0, 1);
+        
         break;
         
     case DONE_PRAYING_BEEP:
-        lcd.print("DONE_BEEP");
+        lcd.print("Sins forgiven.");
         break;
         
     case DONE_PRAYING: 
-        lcd.print("DONE_PRAYING");
+        lcd.print("Sins forgiven.");
+        lcd.setCursor(0, 1);
+        lcd.print("Price: ");
+        lcd.print(prayer_cost);
+        lcd.print(" EUR");
         break;
     
     case BAD_BELIEVER_LEAVING: 
-        lcd.print("BAD_BELIEVER_LEAVING");
+        lcd.print("Come back,");
+        lcd.setCursor(0, 1);
+        lcd.print("sinner!");
         break;
     
     case EXODUS:
-        lcd.print("EXODUS");
+        lcd.print("Now go away!");
         break;
     }
 }
@@ -160,6 +180,7 @@ void display_draw() {
 void loop() {
     ulong t_now = millis();
 
+    analogWrite(PIN_WHITE_LED, whiteLightLevel);
     digitalWrite(PIN_BUZZER, isBeeping ? HIGH : LOW);
 
     if (t_now - timers.DISPLAY_REDRAW >= TIMER_REDRAW_DISPLAY) {
@@ -180,6 +201,11 @@ void loop() {
 
     switch (prayer_state) {
     case NO_BELIEVER:
+        if (whiteLightLevel > 0) {
+            float diff = 10;
+            whiteLightLevel = whiteLightLevel - diff < 1 ? 0 : whiteLightLevel - diff;
+        }
+        
         if (isBelieverPresent(radar_distance)) {
             timers.BELIEVER_PRESENT = t_now;
             set_state(BELIEVER_PRESENT);
@@ -187,7 +213,13 @@ void loop() {
         break;
 
     case BELIEVER_PRESENT:
+        //isWhiteLightOn = true;
+        if (whiteLightLevel < 254) {
+            double diff = 1;
+            whiteLightLevel = whiteLightLevel + diff > 254 ? 254 : whiteLightLevel + diff;
+        }
         if (!isBelieverPresent(radar_distance)) {
+            //isWhiteLightOn = false;
             set_state(NO_BELIEVER);
         } else if (t_now - timers.BELIEVER_PRESENT >= TIMER_BELIEVER_PRESENT) {
             set_state(INITIALIZING_PRAYER);
@@ -197,6 +229,7 @@ void loop() {
 
     case INITIALIZING_PRAYER:
         if (!isBelieverPresent(radar_distance)) {
+            //isWhiteLightOn = false;
             set_state(NO_BELIEVER);
         }
         if (t_now - timers.INITIALIZING_PRAYER >= TIMER_INITIALIZING_PRAYER) {
@@ -224,6 +257,7 @@ void loop() {
         break;
 
     case DONE_PRAYING_BEEP:
+        prayer_cost = random(5, 200);
         isBeeping = true;
         if (t_now - timers.DONE_PRAYING_BEEP > TIMER_DONE_PRAYING_BEEP) {
             isBeeping = false;
@@ -235,6 +269,7 @@ void loop() {
     case DONE_PRAYING:
         if (t_now - timers.DONE_PRAYING > TIMER_DONE_PRAYING) {
             if (!isBelieverPresent(radar_distance)) {
+                isWhiteLightOn = false;
                 set_state(NO_BELIEVER);
             } else {
                 set_state(EXODUS);
@@ -252,6 +287,7 @@ void loop() {
         }
         if (t_now - timers.BAD_BELIEVER_LEAVING > TIMER_BAD_BELIEVER_LEAVING) {
             isBeeping = false;
+            isWhiteLightOn = false;
             set_state(NO_BELIEVER);
             break;
         }
@@ -261,6 +297,7 @@ void loop() {
         isBeeping = true;
         if (!isBelieverPresent(radar_distance)) {
             isBeeping = false;
+            isWhiteLightOn = false;
             set_state(NO_BELIEVER);
         }
         break;
@@ -269,6 +306,10 @@ void loop() {
     Serial.print(radar_distance);
     Serial.print(" ");
     Serial.print(isBelieverPresent(radar_distance) ? "present" : "absent");
+    Serial.print(" light:");
+    Serial.print(whiteLightLevel);
+    Serial.print(" praying:");
+    Serial.print(time_prayed);
     Serial.println("");
 }
 
