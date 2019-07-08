@@ -1,6 +1,7 @@
 #include <LiquidCrystal.h>
 
 #define GOD false
+#define LAST_DISTANCE_COUNT 9
 
 #define PIN_RADAR_ECHO A0
 #define PIN_RADAR_TRIG A1
@@ -12,17 +13,18 @@ const int rs = 6, en = 5, d4 = 9, d5 = 10, d6 = 11, d7 = 12;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 
 const unsigned int
-  TIMER_REDRAW_DISPLAY = 500
+  TIMER_REDRAW_DISPLAY = 200
   , TIMER_MEASURE_RADAR = 1000
   , TIMER_BELIEVER_PRESENT = 2000
-  , TIMER_INITIALIZING_PRAYER = 2000
+  , TIMER_INITIALIZING_PRAYER = 1000
   , TIMER_BAD_BELIEVER_LEAVING = 2000
   , TIMER_DONE_PRAYING_BEEP = 500
   , TIMER_DONE_PRAYING = 2000
-  , PRAYER_TIME = 3000
+  , PRAYER_TIME = 6000
+  , DISTANCE_HIGH = 80
   ;
 
-enum prayer_status
+enum prayer_state
 {
     /**
    * Check, if someone is nearby: at some distance from radar -> next state
@@ -95,15 +97,64 @@ struct timers
 float 
   radar_time = 0, 
   radar_distance = 0;
+  
+int current_last_distance = 0;
+float last_distances[LAST_DISTANCE_COUNT] = { 0 };
+
 bool isBeeping = false;
 int time_prayed = 0;
+bool lcd_redraw_once = false;
 
 void setup() {
+    Serial.begin(4800);
     lcd.begin(16, 2);
     lcd.print("popros pana o odpusteni!");
     pinMode(PIN_RADAR_TRIG, OUTPUT);
     pinMode(PIN_RADAR_ECHO, INPUT);
     pinMode(PIN_BUZZER, OUTPUT);
+}
+
+void display_draw() {
+    if (!lcd_redraw_once) {
+            return;
+    }
+    
+    lcd.clear();
+    lcd_redraw_once = false;
+        
+    switch (prayer_state) {
+    case NO_BELIEVER:
+        lcd.print("NO_BELIEVER");
+        break;
+        
+    case BELIEVER_PRESENT:
+        lcd.print("BELIEVER_PRESENT");
+        break;
+    
+    case INITIALIZING_PRAYER: 
+        lcd.print("INITIALIZING_PRAYER");
+        break;
+    
+    case PRAYING:
+        lcd.print("PRAYING");
+        break;
+        
+    case DONE_PRAYING_BEEP:
+        lcd.print("DONE_BEEP");
+        break;
+        
+    case DONE_PRAYING: 
+        lcd.print("DONE_PRAYING");
+        break;
+    
+    case BAD_BELIEVER_LEAVING: 
+        lcd.print("BAD_BELIEVER_LEAVING");
+        break;
+    
+    case EXODUS:
+        lcd.print("EXODUS");
+        break;
+    }
 }
 
 void loop() {
@@ -112,41 +163,8 @@ void loop() {
     digitalWrite(PIN_BUZZER, isBeeping ? HIGH : LOW);
 
     if (t_now - timers.DISPLAY_REDRAW >= TIMER_REDRAW_DISPLAY) {
-        lcd.clear();
         timers.DISPLAY_REDRAW = t_now;
-        switch (prayer_state) {
-        case NO_BELIEVER:
-            lcd.print("NO_BELIEVER");
-            break;
-            
-        case BELIEVER_PRESENT:
-            lcd.print("BELIEVER_PRESENT");
-            break;
-        
-        case INITIALIZING_PRAYER: 
-            lcd.print("INITIALIZING_PRAYER");
-            break;
-        
-        case PRAYING:
-            lcd.print("PRAYING");
-            break;
-            
-        case DONE_PRAYING_BEEP:
-            lcd.print("DONE_BEEP");
-            break;
-            
-        case DONE_PRAYING: 
-            lcd.print("DONE_PRAYING");
-            break;
-        
-        case BAD_BELIEVER_LEAVING: 
-            lcd.print("BAD_BELIEVER_LEAVING");
-            break;
-        
-        case EXODUS:
-            lcd.print("EXODUS");
-            break;
-        }
+        display_draw();
     }
 
     if (t_now - timers.RADAR_MEASURE >= TIMER_MEASURE_RADAR) {
@@ -164,34 +182,34 @@ void loop() {
     case NO_BELIEVER:
         if (isBelieverPresent(radar_distance)) {
             timers.BELIEVER_PRESENT = t_now;
-            prayer_state = BELIEVER_PRESENT;
+            set_state(BELIEVER_PRESENT);
         }
         break;
 
     case BELIEVER_PRESENT:
         if (!isBelieverPresent(radar_distance)) {
-            prayer_state = NO_BELIEVER;
+            set_state(NO_BELIEVER);
         } else if (t_now - timers.BELIEVER_PRESENT >= TIMER_BELIEVER_PRESENT) {
-            prayer_state = INITIALIZING_PRAYER;
+            set_state(INITIALIZING_PRAYER);
             timers.INITIALIZING_PRAYER = t_now;
         }
         break;
 
     case INITIALIZING_PRAYER:
         if (!isBelieverPresent(radar_distance)) {
-            prayer_state = NO_BELIEVER;
+            set_state(NO_BELIEVER);
         }
         if (t_now - timers.INITIALIZING_PRAYER >= TIMER_INITIALIZING_PRAYER) {
             timers.PRAYING = t_now;
             time_prayed = 0;
-            prayer_state = PRAYING;
+            set_state(PRAYING);
         }
         break;
 
     case PRAYING:
         if (!isBelieverPresent(radar_distance)) {
             timers.BAD_BELIEVER_LEAVING = t_now;
-            prayer_state = BAD_BELIEVER_LEAVING;
+            set_state(BAD_BELIEVER_LEAVING);
             break;
         }
 
@@ -199,7 +217,7 @@ void loop() {
         timers.PRAYING = t_now;
 
         if (time_prayed >= PRAYER_TIME) {
-            prayer_state = DONE_PRAYING_BEEP;
+            set_state(DONE_PRAYING_BEEP);
             timers.DONE_PRAYING_BEEP = t_now;
             break;
         }
@@ -210,16 +228,16 @@ void loop() {
         if (t_now - timers.DONE_PRAYING_BEEP > TIMER_DONE_PRAYING_BEEP) {
             isBeeping = false;
             timers.DONE_PRAYING = t_now;
-            prayer_state = DONE_PRAYING;
+            set_state(DONE_PRAYING);
         }
         break;
 
     case DONE_PRAYING:
         if (t_now - timers.DONE_PRAYING > TIMER_DONE_PRAYING) {
             if (!isBelieverPresent(radar_distance)) {
-                prayer_state = NO_BELIEVER;
+                set_state(NO_BELIEVER);
             } else {
-                prayer_state = EXODUS;
+                set_state(EXODUS);
             }
         }
         break;
@@ -229,12 +247,12 @@ void loop() {
         if (isBelieverPresent(radar_distance)) {
             isBeeping = false;
             timers.PRAYING = t_now;
-            prayer_state = PRAYING;
+            set_state(PRAYING);
             break;
         }
         if (t_now - timers.BAD_BELIEVER_LEAVING > TIMER_BAD_BELIEVER_LEAVING) {
             isBeeping = false;
-            prayer_state = NO_BELIEVER;
+            set_state(NO_BELIEVER);
             break;
         }
         break;
@@ -243,12 +261,63 @@ void loop() {
         isBeeping = true;
         if (!isBelieverPresent(radar_distance)) {
             isBeeping = false;
-            prayer_state = NO_BELIEVER;
+            set_state(NO_BELIEVER);
         }
         break;
     }
+    
+    Serial.print(radar_distance);
+    Serial.print(" ");
+    Serial.print(isBelieverPresent(radar_distance) ? "present" : "absent");
+    Serial.println("");
+}
+
+void set_state(enum prayer_state new_state) {
+    prayer_state = new_state;
+    lcd_redraw_once = true;
 }
 
 bool isBelieverPresent(float dist) {
-    return dist < 80;
+    if (current_last_distance < LAST_DISTANCE_COUNT) {
+        current_last_distance++;
+        return dist < DISTANCE_HIGH;
+    }
+    last_distances[LAST_DISTANCE_COUNT - 1] = dist;
+    
+    for (uint8_t i = 0; i < LAST_DISTANCE_COUNT - 1; i++) {
+        last_distances[i] = last_distances[i + 1];
+    }
+    float dist_med = median(LAST_DISTANCE_COUNT, last_distances);
+    return dist_med < DISTANCE_HIGH;
+}
+
+float mean(int m, int a[]) {
+    int sum=0, i;
+    for(i=0; i<m; i++)
+        sum+=a[i];
+    return((float)sum/m);
+}
+
+float median(int n, float x[]) {
+    int temp;
+    int i, j;
+    // the following two loops sort the array x in ascending order
+    for(i=0; i<n-1; i++) {
+        for(j=i+1; j<n; j++) {
+            if(x[j] < x[i]) {
+                // swap elements
+                temp = x[i];
+                x[i] = x[j];
+                x[j] = temp;
+            }
+        }
+    }
+
+    if(n%2==0) {
+        // if there is an even number of elements, return mean of the two elements in the middle
+        return((x[n/2] + x[n/2 - 1]) / 2.0);
+    } else {
+        // else return the element in the middle
+        return x[n/2];
+    }
 }
