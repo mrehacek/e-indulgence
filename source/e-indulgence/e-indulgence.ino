@@ -5,7 +5,7 @@
 
 #define PIN_RADAR_ECHO A0
 #define PIN_RADAR_TRIG A1
-#define PIN_BUZZER A2
+#define PIN_BUZZER 13
 #define PIN_WHITE_LED 3
 
 typedef unsigned long ulong;
@@ -106,7 +106,6 @@ bool isBeeping = false;
 int time_prayed = 0;
 bool lcd_redraw_once = false;
 
-bool isWhiteLightOn = false;
 int whiteLightLevel = 0;
 int prayer_cost = 0;
 
@@ -213,13 +212,11 @@ void loop() {
         break;
 
     case BELIEVER_PRESENT:
-        //isWhiteLightOn = true;
         if (whiteLightLevel < 254) {
             double diff = 1;
             whiteLightLevel = whiteLightLevel + diff > 254 ? 254 : whiteLightLevel + diff;
         }
         if (!isBelieverPresent(radar_distance)) {
-            //isWhiteLightOn = false;
             set_state(NO_BELIEVER);
         } else if (t_now - timers.BELIEVER_PRESENT >= TIMER_BELIEVER_PRESENT) {
             set_state(INITIALIZING_PRAYER);
@@ -229,7 +226,6 @@ void loop() {
 
     case INITIALIZING_PRAYER:
         if (!isBelieverPresent(radar_distance)) {
-            //isWhiteLightOn = false;
             set_state(NO_BELIEVER);
         }
         if (t_now - timers.INITIALIZING_PRAYER >= TIMER_INITIALIZING_PRAYER) {
