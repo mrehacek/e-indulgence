@@ -2,7 +2,7 @@
 #include "LcdProgressBar.h"
 
 #define GOD false
-#define LAST_DISTANCE_COUNT 19
+#define LAST_DISTANCE_COUNT 23
 #define DISPLAY_COLS_NUM 16
 
 #define PIN_RADAR_ECHO A0
@@ -18,14 +18,14 @@ LcdProgressBar lpg(&lcd, 1, DISPLAY_COLS_NUM);
 
 const unsigned int
   TIMER_REDRAW_DISPLAY = 200
-  , TIMER_MEASURE_RADAR = 50
-  , TIMER_BELIEVER_PRESENT = 2000
-  , TIMER_INITIALIZING_PRAYER = 1000
-  , TIMER_BAD_BELIEVER_LEAVING = 2000
+  , TIMER_MEASURE_RADAR = 30
+  , TIMER_BELIEVER_PRESENT = 2500
+  , TIMER_INITIALIZING_PRAYER = 2500
+  , TIMER_BAD_BELIEVER_LEAVING = 3500
   , TIMER_DONE_PRAYING_BEEP = 100
-  , TIMER_DONE_PRAYING = 2000
-  , PRAYER_TIME = 6000
-  , DISTANCE_HIGH = 80
+  , TIMER_DONE_PRAYING = 3500
+  , PRAYER_TIME = 10000
+  , DISTANCE_HIGH = 70
   ;
 
 enum prayer_state
@@ -209,7 +209,7 @@ void loop() {
     switch (prayer_state) {
     case NO_BELIEVER:
         if (whiteLightLevel > 0) {
-            double diff = 1;
+            double diff = 2;
             whiteLightLevel = whiteLightLevel - diff < 1 ? 0 : whiteLightLevel - diff;
         }
         
