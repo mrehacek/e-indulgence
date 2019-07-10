@@ -1,7 +1,9 @@
 #include <LiquidCrystal.h>
+#include "LcdProgressBar.h"
 
 #define GOD false
-#define LAST_DISTANCE_COUNT 9
+#define LAST_DISTANCE_COUNT 19
+#define DISPLAY_COLS_NUM 16
 
 #define PIN_RADAR_ECHO A0
 #define PIN_RADAR_TRIG A1
@@ -12,10 +14,11 @@ typedef unsigned long ulong;
 
 const int rs = 6, en = 5, d4 = 9, d5 = 10, d6 = 11, d7 = 12;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
+LcdProgressBar lpg(&lcd, 1, DISPLAY_COLS_NUM);
 
 const unsigned int
   TIMER_REDRAW_DISPLAY = 200
-  , TIMER_MEASURE_RADAR = 1000
+  , TIMER_MEASURE_RADAR = 50
   , TIMER_BELIEVER_PRESENT = 2000
   , TIMER_INITIALIZING_PRAYER = 1000
   , TIMER_BAD_BELIEVER_LEAVING = 2000
@@ -93,6 +96,7 @@ struct timers
   ulong DONE_PRAYING;
   ulong BAD_BELIEVER_LEAVING;
   ulong EXODUS;
+  ulong PROGRESS_BAR;
 } timers = { 0 };
 
 float 
@@ -110,13 +114,17 @@ int whiteLightLevel = 0;
 int prayer_cost = 0;
 
 void setup() {
+#ifdef DEBUG
     Serial.begin(4800);
+#endif
     lcd.begin(16, 2);
 
     pinMode(PIN_RADAR_TRIG, OUTPUT);
     pinMode(PIN_RADAR_ECHO, INPUT);
     pinMode(PIN_BUZZER, OUTPUT);
     pinMode(PIN_WHITE_LED, OUTPUT);
+    
+    init_progress_bar();
 }
 
 void display_draw() {
@@ -149,7 +157,7 @@ void display_draw() {
     case PRAYING:
         lcd.print("Now pray.");
         lcd.setCursor(0, 1);
-        
+        lpg.draw(timers.PROGRESS_BAR);
         break;
         
     case DONE_PRAYING_BEEP:
@@ -201,7 +209,7 @@ void loop() {
     switch (prayer_state) {
     case NO_BELIEVER:
         if (whiteLightLevel > 0) {
-            float diff = 10;
+            double diff = 1;
             whiteLightLevel = whiteLightLevel - diff < 1 ? 0 : whiteLightLevel - diff;
         }
         
@@ -231,6 +239,7 @@ void loop() {
         if (t_now - timers.INITIALIZING_PRAYER >= TIMER_INITIALIZING_PRAYER) {
             timers.PRAYING = t_now;
             time_prayed = 0;
+            init_progress_bar();
             set_state(PRAYING);
         }
         break;
@@ -241,13 +250,15 @@ void loop() {
             set_state(BAD_BELIEVER_LEAVING);
             break;
         }
-
+        
         time_prayed += t_now - timers.PRAYING;
         timers.PRAYING = t_now;
-
+        
+        lpg.draw(t_now);
+        
         if (time_prayed >= PRAYER_TIME) {
-            set_state(DONE_PRAYING_BEEP);
             timers.DONE_PRAYING_BEEP = t_now;
+            set_state(DONE_PRAYING_BEEP);
             break;
         }
         break;
@@ -265,7 +276,6 @@ void loop() {
     case DONE_PRAYING:
         if (t_now - timers.DONE_PRAYING > TIMER_DONE_PRAYING) {
             if (!isBelieverPresent(radar_distance)) {
-                isWhiteLightOn = false;
                 set_state(NO_BELIEVER);
             } else {
                 set_state(EXODUS);
@@ -283,7 +293,6 @@ void loop() {
         }
         if (t_now - timers.BAD_BELIEVER_LEAVING > TIMER_BAD_BELIEVER_LEAVING) {
             isBeeping = false;
-            isWhiteLightOn = false;
             set_state(NO_BELIEVER);
             break;
         }
@@ -293,12 +302,12 @@ void loop() {
         isBeeping = true;
         if (!isBelieverPresent(radar_distance)) {
             isBeeping = false;
-            isWhiteLightOn = false;
             set_state(NO_BELIEVER);
         }
         break;
     }
     
+#ifdef DEBUG
     Serial.print(radar_distance);
     Serial.print(" ");
     Serial.print(isBelieverPresent(radar_distance) ? "present" : "absent");
@@ -307,6 +316,15 @@ void loop() {
     Serial.print(" praying:");
     Serial.print(time_prayed);
     Serial.println("");
+#endif
+}
+
+void init_progress_bar()
+{
+  timers.PROGRESS_BAR = millis();
+  lpg.setMinValue(timers.PROGRESS_BAR);
+  lpg.setMaxValue(timers.PROGRESS_BAR + PRAYER_TIME);
+  lpg.draw(timers.PROGRESS_BAR);
 }
 
 void set_state(enum prayer_state new_state) {
