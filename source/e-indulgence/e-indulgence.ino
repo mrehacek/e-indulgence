@@ -1,4 +1,5 @@
-#include <LiquidCrystal.h>
+#include <Wire.h> 
+#include "LiquidCrystal_I2C.h"
 #include "LcdProgressBar.h"
 
 #define GOD false
@@ -12,8 +13,7 @@
 
 typedef unsigned long ulong;
 
-const int rs = 6, en = 5, d4 = 9, d5 = 10, d6 = 11, d7 = 12;
-LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
+LiquidCrystal_I2C lcd(0x27, 16, 2);
 LcdProgressBar lpg(&lcd, 1, DISPLAY_COLS_NUM);
 
 const unsigned int
@@ -117,7 +117,8 @@ void setup() {
 #ifdef DEBUG
     Serial.begin(4800);
 #endif
-    lcd.begin(16, 2);
+	lcd.begin();
+	lcd.backlight();
 
     pinMode(PIN_RADAR_TRIG, OUTPUT);
     pinMode(PIN_RADAR_ECHO, INPUT);

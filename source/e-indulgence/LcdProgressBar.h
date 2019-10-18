@@ -17,7 +17,8 @@
 #define LcdProgressBar_h
 
 #include "Arduino.h"
-#include <LiquidCrystal.h>
+#include <Wire.h> 
+#include "LiquidCrystal_I2C.h"
 
 /**
  * Version
@@ -42,7 +43,7 @@ class LcdProgressBar
      * @param row     Which row to display. 0 is the 1st row, 1 is the second, ...
      * @param numCols Number of columns your LCD has (16, 8, ...)
      */
-    LcdProgressBar(LiquidCrystal* lcd, int row = 0, int numCols = 16);
+    LcdProgressBar(LiquidCrystal_I2C* lcd, int row = 0, int numCols = 16);
 
     /**
      * Set the starting value of your progress bar (0 by default)
@@ -69,7 +70,7 @@ class LcdProgressBar
 
   private:
     //-- LiquidCrystal instance
-    LiquidCrystal* _lcd;
+    LiquidCrystal_I2C* _lcd;
 
     //-- Starting value
     unsigned long _minValue = 0;
